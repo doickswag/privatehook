@@ -1,0 +1,105 @@
+import java.text.SimpleDateFormat
+
+plugins {
+    id "fabric-loom" version "1.7-SNAPSHOT"
+}
+
+base {
+    archivesBaseName = project.archives_base_name
+    version = project.mod_version
+    group = project.maven_group
+}
+
+repositories {
+    maven {
+        name = "Meteor Dev Releases"
+        url = "https://maven.meteordev.org/releases"
+    }
+    maven {
+        name = "Meteor Dev Snapshots"
+        url = "https://maven.meteordev.org/snapshots"
+    }
+
+}
+
+dependencies {
+    // Fabric
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    // Meteor
+    modImplementation "meteordevelopment:meteor-client:${project.meteor_version}"
+    implementation 'org.java-websocket:Java-WebSocket:1.6.0'
+    compileOnly("org.projectlombok:lombok:1.18.38")
+    annotationProcessor("org.projectlombok:lombok:1.18.38")
+}
+
+tasks {
+    processResources {
+        def propertyMap = [
+            "version"   : project.version,
+            "mc_version": project.minecraft_version,
+        ]
+
+        filesMatching("fabric.mod.json") {
+            expand(propertyMap)
+        }
+    }
+
+    jar {
+        from("LICENSE") {
+            rename { "${it}_${project.base.archivesBaseName}" }
+        }
+    }
+
+    java {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        it.options.encoding = "UTF-8"
+        it.options.release = 21
+    }
+}
+
+def getGitCommitHash() {
+    try {
+        def stdout = new ByteArrayOutputStream()
+        exec {
+            commandLine 'git', 'rev-parse', '--short', 'HEAD'
+            standardOutput = stdout
+            ignoreExitValue true
+        }
+        def hash = stdout.toString().trim()
+        return hash.isEmpty() ? "unknown" : hash
+    } catch (Exception e) {
+        return "unknown"
+    }
+}
+
+def generatedDir = file("$buildDir/generated/buildinfo")
+
+task generateBuildInfo {
+    doLast {
+        def buildTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date())
+        def commitHash = getGitCommitHash()
+        def pkg = "com.example.addon"
+        def pkgDir = new File(generatedDir, pkg.replace('.', '/'))
+        pkgDir.mkdirs()
+
+        def file = new File(pkgDir, "BuildInfo.java")
+        file.text = """
+            package $pkg;
+
+            public class BuildInfo {
+                public static final String BUILD_TIME = "$buildTime";
+                public static final String COMMIT = "$commitHash";
+            }
+        """.stripIndent()
+    }
+}
+
+compileJava.dependsOn generateBuildInfo
+sourceSets.main.java.srcDir generatedDir
